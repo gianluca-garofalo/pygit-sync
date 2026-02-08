@@ -96,15 +96,18 @@ class BranchSynchronizer:
                 stashed_for_sync = True
                 self.output.info(f"\u2713 Stashed local changes for sync: {stash_msg}", indent=1)
 
+        up_to_date = 0
         for branch_name, remote_branch in remote_branches.items():
             if not self._matches_branch_filter(branch_name):
                 continue
             if branch_name in local_branches:
-                issue = self._sync_existing_branch(local_branches[branch_name], remote_branch)
-                if issue:
-                    result.add_issue(issue)
-                else:
+                outcome = self._sync_existing_branch(local_branches[branch_name], remote_branch)
+                if isinstance(outcome, SyncIssue):
+                    result.add_issue(outcome)
+                elif outcome is True:
                     result.branches_updated.append((str(self.repo.path), branch_name))
+                else:
+                    up_to_date += 1
             elif self.config.create_branches:
                 if self._is_branch_too_old(remote_branch):
                     continue
@@ -115,6 +118,9 @@ class BranchSynchronizer:
                         str(self.repo.path), branch_name,
                         IssueType.FAILED, "Branch creation failed"
                     ))
+
+        if up_to_date > 0:
+            self.output.info(f"\u2713 {up_to_date} branches already up to date")
 
         if original_branch and not self.config.dry_run:
             self.repo.checkout(original_branch)
@@ -159,11 +165,15 @@ class BranchSynchronizer:
         self,
         local_branch: BranchInfo,
         remote_branch: BranchInfo
-    ) -> SyncIssue | None:
-        """Determine branch status and sync, only checking out when a pull is needed."""
-        self.output.info(f"\u2713 Local branch exists: {local_branch.name}")
-
+    ) -> SyncIssue | bool | None:
+        """Determine branch status and sync. Returns SyncIssue on problem, True if modified, None if up-to-date."""
         status = self.repo.get_branch_status(local_branch.name)
+
+        # Up-to-date branches: no output, no action
+        if status.has_upstream and status.commits_ahead == 0 and status.commits_behind == 0:
+            return None
+
+        self.output.info(f"\u2500 {local_branch.name}")
 
         # Only checkout if the branch is behind remote (needs pulling)
         if status.commits_behind > 0 and not self.config.dry_run:
@@ -176,7 +186,8 @@ class BranchSynchronizer:
 
         for strategy in self.strategies:
             if strategy.can_handle(local_branch, status):
-                return strategy.sync(local_branch, self.config.remote_name, status)
+                issue = strategy.sync(local_branch, self.config.remote_name, status)
+                return issue if issue else True
 
         return None
 

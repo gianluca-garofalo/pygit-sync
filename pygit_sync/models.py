@@ -144,7 +144,7 @@ class SyncConfig:
     branch_patterns: list[str] = field(default_factory=list)
     json_output: bool = False
     fetch_retries: int = 0
-    create_branches: bool = True
+    create_branches: bool = False
     max_branch_age: int = 180
 
     def with_updates(self, **kwargs) -> SyncConfig:
