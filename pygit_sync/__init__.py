@@ -9,7 +9,7 @@ from colorama import init as colorama_init
 
 colorama_init(autoreset=True)
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # Re-export public API so `from pygit_sync import X` keeps working.
 from pygit_sync.cli import main  # noqa: E402

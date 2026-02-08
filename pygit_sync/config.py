@@ -58,6 +58,10 @@ Examples:
                        help='Comma-separated branch patterns to sync (e.g., "main,develop,release/*")')
     parser.add_argument('--json', dest='json_output', action='store_true',
                        help='Output results as JSON (suppresses normal output)')
+    parser.add_argument('--no-create-branches', dest='create_branches', action='store_false',
+                       help='Do not create local branches for remote-only branches')
+    parser.add_argument('--max-branch-age', type=int, default=180,
+                       help='Only create branches with commits newer than N days (default: 180, 0=no limit)')
     parser.add_argument('--fetch-retries', type=int, default=0,
                        help='Number of retries for failed fetches (default: 0)')
     parser.add_argument('--config', type=str, default=None,

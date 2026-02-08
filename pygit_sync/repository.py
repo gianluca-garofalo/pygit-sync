@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from git import GitCommandError, Repo
@@ -58,7 +59,8 @@ class GitPythonRepository:
             self._repo.git.checkout(branch)
             return OperationResult(True, OperationType.CHECKOUT, f"Checked out {branch}")
         except GitCommandError as e:
-            return OperationResult(False, OperationType.CHECKOUT, "Checkout failed", e)
+            stderr = str(e.stderr).strip() if e.stderr else str(e)
+            return OperationResult(False, OperationType.CHECKOUT, stderr, e)
 
     def pull(self, remote: str, branch: str, rebase: bool = False) -> OperationResult:
         """Pull from remote/branch, using rebase or merge. Aborts on failure."""
@@ -80,9 +82,9 @@ class GitPythonRepository:
             return OperationResult(False, op_type, "Pull failed", e)
 
     def create_branch(self, name: str, start_point: str) -> OperationResult:
-        """Create and check out a new branch from the given start point."""
+        """Create a new local branch tracking the remote ref (without checking out)."""
         try:
-            self._repo.git.checkout('-b', name, start_point)
+            self._repo.git.branch('--track', name, start_point)
             return OperationResult(True, OperationType.BRANCH_CREATE, f"Created branch {name}")
         except GitCommandError as e:
             return OperationResult(False, OperationType.BRANCH_CREATE, "Branch creation failed", e)
@@ -192,6 +194,14 @@ class GitPythonRepository:
     def is_clean(self) -> bool:
         """Return True if the working tree has no staged, unstaged, or untracked changes."""
         return not self._repo.is_dirty(untracked_files=True)
+
+    def get_commit_date(self, ref: str) -> datetime | None:
+        """Return the commit date of a ref, or None if it cannot be resolved."""
+        try:
+            commit = self._repo.commit(ref)
+            return commit.committed_datetime.astimezone(timezone.utc)
+        except Exception:
+            return None
 
     def get_change_counts(self) -> dict[str, int]:
         """Return counts of staged, unstaged, and untracked changes."""

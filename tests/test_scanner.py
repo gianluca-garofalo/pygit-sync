@@ -20,11 +20,13 @@ class TestRepositoryScanner:
         assert "not-a-repo" not in repo_names
 
     def test_find_nested_repositories(self, tmp_path: Path):
+        """Repos nested inside other repos (submodules) should not be discovered."""
+        (tmp_path / "parent" / ".git").mkdir(parents=True)
         (tmp_path / "parent" / "child" / ".git").mkdir(parents=True)
         scanner = RepositoryScanner()
         repos = list(scanner.find_repositories(tmp_path))
         assert len(repos) == 1
-        assert repos[0].name == "child"
+        assert repos[0].name == "parent"
 
     def test_exclude_patterns(self, tmp_path: Path):
         (tmp_path / "repo1" / ".git").mkdir(parents=True)
