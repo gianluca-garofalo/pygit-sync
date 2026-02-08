@@ -69,6 +69,8 @@ def main():
         branch_patterns=branch_patterns,
         json_output=effective('json_output', 'json_output'),
         fetch_retries=effective('fetch_retries', 'fetch_retries'),
+        create_branches=effective('create_branches', 'create_branches'),
+        max_branch_age=effective('max_branch_age', 'max_branch_age'),
     )
 
     logging.basicConfig(

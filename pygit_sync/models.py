@@ -144,6 +144,8 @@ class SyncConfig:
     branch_patterns: list[str] = field(default_factory=list)
     json_output: bool = False
     fetch_retries: int = 0
+    create_branches: bool = True
+    max_branch_age: int = 180
 
     def with_updates(self, **kwargs) -> SyncConfig:
         """Return a new SyncConfig with the given fields replaced."""
