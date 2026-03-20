@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from colorama import Fore, Style
+from tqdm import tqdm
 
 from pygit_sync.protocols import OutputHandler
 
@@ -18,30 +19,30 @@ class ConsoleOutputHandler:
 
     def info(self, message: str, indent: int = 0) -> None:
         """Print an informational message."""
-        print("  " * indent + message)
+        tqdm.write("  " * indent + message)
 
     def success(self, message: str, indent: int = 0) -> None:
         """Print a green success message."""
-        print("  " * indent + f"{Fore.GREEN}{message}{Style.RESET_ALL}")
+        tqdm.write("  " * indent + f"{Fore.GREEN}{message}{Style.RESET_ALL}")
 
     def warning(self, message: str, indent: int = 0) -> None:
         """Print a yellow warning message."""
-        print("  " * indent + f"{Fore.YELLOW}{message}{Style.RESET_ALL}")
+        tqdm.write("  " * indent + f"{Fore.YELLOW}{message}{Style.RESET_ALL}")
 
     def error(self, message: str, indent: int = 0) -> None:
         """Print a red error message."""
-        print("  " * indent + f"{Fore.RED}{message}{Style.RESET_ALL}")
+        tqdm.write("  " * indent + f"{Fore.RED}{message}{Style.RESET_ALL}")
 
     def section(self, title: str) -> None:
         """Print a section header with a divider line."""
-        print()
-        print(title)
-        print("-" * SECTION_WIDTH)
+        tqdm.write("")
+        tqdm.write(title)
+        tqdm.write("-" * SECTION_WIDTH)
 
     def debug(self, message: str) -> None:
         """Print a cyan debug message (only when verbose is enabled)."""
         if self.verbose:
-            print(f"{Fore.CYAN}[DEBUG] {message}{Style.RESET_ALL}")
+            tqdm.write(f"{Fore.CYAN}[DEBUG] {message}{Style.RESET_ALL}")
 
 
 class NullOutputHandler:

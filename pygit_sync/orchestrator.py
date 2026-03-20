@@ -51,8 +51,9 @@ class SyncOrchestrator:
         """Sync repositories one at a time with a progress bar."""
         combined_result = SyncResult()
 
-        with tqdm(total=len(repos), desc="Syncing repositories", disable=self.config.dry_run) as pbar:
+        with tqdm(total=len(repos), desc="Syncing", unit="repo", disable=self.config.dry_run) as pbar:
             for repo_path in repos:
+                pbar.set_postfix_str(repo_path.name, refresh=True)
                 result = self._sync_single_repo(repo_path)
                 self._merge_results(combined_result, result)
                 pbar.update(1)
