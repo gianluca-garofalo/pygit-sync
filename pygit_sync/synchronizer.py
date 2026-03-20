@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import time
+from datetime import datetime, timezone
 
 from pygit_sync.models import (
     BranchInfo,
@@ -53,6 +54,16 @@ class BranchSynchronizer:
             return True
         return any(fnmatch.fnmatch(branch_name, p) for p in self.config.branch_patterns)
 
+    def _is_branch_too_old(self, remote_branch: BranchInfo) -> bool:
+        """Return True if the branch's latest commit is older than max_branch_age days."""
+        if self.config.max_branch_age <= 0:
+            return False
+        commit_date = self.repo.get_commit_date(remote_branch.full_name)
+        if commit_date is None:
+            return False
+        age_days = (datetime.now(timezone.utc) - commit_date).days
+        return age_days > self.config.max_branch_age
+
     def sync(self) -> SyncResult:
         """Fetch, detect stale branches, and sync each remote branch. Returns accumulated results."""
         result = SyncResult()
@@ -74,6 +85,17 @@ class BranchSynchronizer:
 
         original_branch = self.repo.current_branch
 
+        # Pre-stash dirty changes so checkouts to other branches succeed
+        stashed_for_sync = False
+        stash_msg = ""
+        if self.config.stash_and_pull and not self.config.dry_run and not self.repo.is_clean():
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            stash_msg = f"auto-stash-{timestamp}-sync"
+            stash_result = self.repo.stash_push(stash_msg)
+            if stash_result.success:
+                stashed_for_sync = True
+                self.output.info(f"\u2713 Stashed local changes for sync: {stash_msg}", indent=1)
+
         for branch_name, remote_branch in remote_branches.items():
             if not self._matches_branch_filter(branch_name):
                 continue
@@ -83,7 +105,9 @@ class BranchSynchronizer:
                     result.add_issue(issue)
                 else:
                     result.branches_updated.append((str(self.repo.path), branch_name))
-            else:
+            elif self.config.create_branches:
+                if self._is_branch_too_old(remote_branch):
+                    continue
                 if self._create_branch(remote_branch):
                     result.branches_created.append((str(self.repo.path), branch_name))
                 else:
@@ -94,6 +118,20 @@ class BranchSynchronizer:
 
         if original_branch and not self.config.dry_run:
             self.repo.checkout(original_branch)
+
+        if stashed_for_sync:
+            pop_result = self.repo.stash_pop()
+            if pop_result.success:
+                self.output.success("\u2713 Restored stashed changes", indent=1)
+            else:
+                self.output.warning(
+                    "\u26a0 Stash pop had conflicts \u2014 run 'git stash pop' manually",
+                    indent=1
+                )
+                result.add_issue(SyncIssue(
+                    str(self.repo.path), "", IssueType.STASH_CONFLICT,
+                    f"stash: {stash_msg}"
+                ))
 
         result.repos_processed = 1
         return result
@@ -122,18 +160,19 @@ class BranchSynchronizer:
         local_branch: BranchInfo,
         remote_branch: BranchInfo
     ) -> SyncIssue | None:
-        """Check out an existing branch, determine its status, and delegate to the matching strategy."""
+        """Determine branch status and sync, only checking out when a pull is needed."""
         self.output.info(f"\u2713 Local branch exists: {local_branch.name}")
 
-        if not self.config.dry_run:
+        status = self.repo.get_branch_status(local_branch.name)
+
+        # Only checkout if the branch is behind remote (needs pulling)
+        if status.commits_behind > 0 and not self.config.dry_run:
             checkout_result = self.repo.checkout(local_branch.name)
             if not checkout_result.success:
                 return SyncIssue(
                     str(self.repo.path), local_branch.name,
                     IssueType.FAILED, f"Checkout failed: {checkout_result.message}"
                 )
-
-        status = self.repo.get_branch_status(local_branch.name)
 
         for strategy in self.strategies:
             if strategy.can_handle(local_branch, status):

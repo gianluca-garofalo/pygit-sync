@@ -85,6 +85,9 @@ class FakeGitRepository:
             return {'staged': 0, 'unstaged': 0, 'untracked': 0}
         return {'staged': 1, 'unstaged': 3, 'untracked': 2}
 
+    def get_commit_date(self, ref: str):
+        return None
+
     def close(self) -> None:
         pass
 

@@ -302,6 +302,7 @@ class TestNewBranch:
 
         result = _run_sync(
             local_clone.parent,
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 
@@ -327,6 +328,7 @@ class TestNewBranch:
 
         result = _run_sync(
             local_clone.parent,
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 
@@ -344,6 +346,7 @@ class TestNewBranch:
         result = _run_sync(
             local_clone.parent,
             dry_run=True,
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 
@@ -716,6 +719,7 @@ class TestJsonOutput:
         result = _run_sync(
             local_clone.parent,
             json_output=True,
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 
@@ -770,6 +774,7 @@ class TestBranchFilter:
         result = _run_sync(
             local_clone.parent,
             branch_patterns=["release/*"],
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 
@@ -795,6 +800,7 @@ class TestBranchFilter:
         result = _run_sync(
             local_clone.parent,
             branch_patterns=["main", "develop", "release/*"],
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 
@@ -863,6 +869,7 @@ class TestBranchFilter:
         result = _run_sync(
             local_clone.parent,
             branch_patterns=["main"],
+            create_branches=True,
             exclude_patterns=["pusher", "remote.git"],
         )
 

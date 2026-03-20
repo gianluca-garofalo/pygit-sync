@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-08
+
+### Added
+- `--no-create-branches` flag to disable automatic local branch creation for remote-only branches
+- `--max-branch-age` flag to only create branches with commits newer than N days (default: 180)
+- `get_commit_date()` method on `GitRepository` protocol for branch age filtering
+- Pre-stash at sync level: with `--stash-and-pull`, dirty changes are stashed once before syncing all branches (enables checkout to other branches), then restored after
+
+### Changed
+- Branch creation now uses `git branch --track` instead of `git checkout -b` (no checkout needed)
+- Synchronizer only checks out branches that are behind remote (avoids unnecessary checkout failures)
+- Checkout error messages now include the actual git error instead of a generic "Checkout failed"
+- Scanner stops at git repository boundaries (does not descend into submodules or build deps)
+
+### Fixed
+- Summary report now shows branch names alongside repo paths for stale/failed branch issues
+- Repos with hundreds of remote branches no longer produce thousands of failed branch-creation attempts
+
 ## [1.1.0] - 2025-02-08
 
 ### Added
