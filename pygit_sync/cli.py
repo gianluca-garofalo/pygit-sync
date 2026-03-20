@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from colorama import Fore, Style
+from colorama import init as colorama_init
 
 from pygit_sync.config import create_argument_parser, load_config_file
 from pygit_sync.models import SyncConfig
@@ -18,6 +19,7 @@ from pygit_sync.reporter import SummaryReporter
 
 def main():
     """Main entry point"""
+    colorama_init(autoreset=True)
     parser = create_argument_parser()
     args = parser.parse_args()
 
@@ -28,15 +30,21 @@ def main():
 
     file_config = load_config_file(search_dir, args.config)
 
-    # Determine which args were explicitly set on CLI
-    cli_explicit = set()
-    for action in parser._actions:
-        if action.dest in ('help', 'version'):
+    # Determine which args were explicitly set on CLI by parsing with
+    # sentinel defaults and checking which values differ from the sentinel.
+    _SENTINEL = object()
+    sentinel_parser = create_argument_parser()
+    for action in sentinel_parser._actions:
+        if action.dest in ('help', 'version', 'directory'):
             continue
-        for opt_string in action.option_strings:
-            if opt_string in sys.argv:
-                cli_explicit.add(action.dest)
-                break
+        action.default = _SENTINEL
+    sentinel_args = sentinel_parser.parse_args()
+    cli_explicit = {
+        action.dest
+        for action in parser._actions
+        if action.dest not in ('help', 'version', 'directory')
+        and getattr(sentinel_args, action.dest, _SENTINEL) is not _SENTINEL
+    }
 
     def effective(dest: str, toml_key: str, transform=None):
         if dest in cli_explicit:
@@ -71,7 +79,11 @@ def main():
         fetch_retries=effective('fetch_retries', 'fetch_retries'),
         create_branches=effective('create_branches', 'create_branches'),
         max_branch_age=effective('max_branch_age', 'max_branch_age'),
+        plain=effective('plain', 'plain'),
     )
+
+    if 'max_branch_age' in cli_explicit and not config.create_branches:
+        print(f"{Fore.YELLOW}Warning: --max-branch-age has no effect without --create-branches{Style.RESET_ALL}")
 
     logging.basicConfig(
         level=logging.DEBUG if config.verbose else logging.INFO,
@@ -88,7 +100,7 @@ def main():
         if config.json_output:
             print(json.dumps(result.to_dict(), indent=2))
         else:
-            reporter = SummaryReporter(output)
+            reporter = SummaryReporter(output, plain=config.plain)
             reporter.print_summary(result, config)
 
         sys.exit(1 if result.has_critical_issues() else 0)

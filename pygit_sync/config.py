@@ -36,35 +36,45 @@ Examples:
     parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     parser.add_argument('directory', nargs='?', default='.',
                        help='Directory to search (default: current)')
-    parser.add_argument('--execute', action='store_true',
-                       help='Actually execute (default: dry-run)')
-    parser.add_argument('--no-rebase', dest='rebase', action='store_false',
-                       help='Use merge instead of rebase')
-    parser.add_argument('--no-remove-stale', dest='remove_stale', action='store_false',
-                       help='Keep stale branches')
-    parser.add_argument('--stash-and-pull', action='store_true',
-                       help='Auto-stash local changes')
-    parser.add_argument('--parallel', action='store_true',
-                       help='Sync repositories in parallel')
-    parser.add_argument('--max-workers', type=int, default=min(os.cpu_count() or 4, 8),
-                       help='Max parallel workers (default: min(cpu_count, 8))')
-    parser.add_argument('--exclude', action='append', default=[],
-                       help='Exclude pattern (can specify multiple)')
-    parser.add_argument('--verbose', action='store_true',
+
+    behavior = parser.add_argument_group('behavior')
+    behavior.add_argument('-x', '--execute', action='store_true',
+                         help='Actually execute (default: dry-run)')
+    behavior.add_argument('--no-rebase', dest='rebase', action='store_false',
+                         help='Use merge instead of rebase')
+    behavior.add_argument('--no-remove-stale', dest='remove_stale', action='store_false',
+                         help='Keep stale branches')
+    behavior.add_argument('--stash-and-pull', action='store_true',
+                         help='Auto-stash local changes')
+    behavior.add_argument('--create-branches', dest='create_branches', action='store_true',
+                         help='Create local branches for remote-only branches')
+
+    filtering = parser.add_argument_group('filtering')
+    filtering.add_argument('--remote', default='origin', metavar='NAME',
+                          help='Remote name to sync from (default: origin)')
+    filtering.add_argument('--branches', type=str, default='', metavar='PATTERNS',
+                          help='Comma-separated branch patterns to sync (e.g., "main,develop,release/*")')
+    filtering.add_argument('--exclude', action='append', default=[], metavar='PATTERN',
+                          help='Exclude pattern (can specify multiple)')
+    filtering.add_argument('--max-branch-age', type=int, default=180, metavar='N',
+                          help='Only create branches with commits newer than N days (default: 180, 0=no limit)')
+
+    performance = parser.add_argument_group('performance')
+    performance.add_argument('-p', '--parallel', action='store_true',
+                            help='Sync repositories in parallel')
+    performance.add_argument('--max-workers', type=int, default=min(os.cpu_count() or 4, 8), metavar='N',
+                            help='Max parallel workers (default: min(cpu_count, 8))')
+    performance.add_argument('--fetch-retries', type=int, default=0, metavar='N',
+                            help='Number of retries for failed fetches (default: 0)')
+
+    output = parser.add_argument_group('output')
+    output.add_argument('-v', '--verbose', action='store_true',
                        help='Verbose output')
-    parser.add_argument('--remote', default='origin',
-                       help='Remote name to sync from (default: origin)')
-    parser.add_argument('--branches', type=str, default='',
-                       help='Comma-separated branch patterns to sync (e.g., "main,develop,release/*")')
-    parser.add_argument('--json', dest='json_output', action='store_true',
+    output.add_argument('--json', dest='json_output', action='store_true',
                        help='Output results as JSON (suppresses normal output)')
-    parser.add_argument('--no-create-branches', dest='create_branches', action='store_false',
-                       help='Do not create local branches for remote-only branches')
-    parser.add_argument('--max-branch-age', type=int, default=180,
-                       help='Only create branches with commits newer than N days (default: 180, 0=no limit)')
-    parser.add_argument('--fetch-retries', type=int, default=0,
-                       help='Number of retries for failed fetches (default: 0)')
-    parser.add_argument('--config', type=str, default=None,
+    output.add_argument('--plain', action='store_true',
+                       help='Disable emoji in output (for terminals with limited Unicode)')
+    output.add_argument('--config', type=str, default=None, metavar='PATH',
                        help='Path to config file (default: .pygitrc.toml in search dir or home)')
 
     return parser

@@ -66,7 +66,6 @@ class SyncIssue:
 class BranchStatus:
     """Status of a branch relative to its upstream"""
     exists: bool = False
-    is_clean: bool = False
     has_upstream: bool = False
     commits_ahead: int = 0
     commits_behind: int = 0
@@ -146,6 +145,7 @@ class SyncConfig:
     fetch_retries: int = 0
     create_branches: bool = False
     max_branch_age: int = 180
+    plain: bool = False
 
     def with_updates(self, **kwargs) -> SyncConfig:
         """Return a new SyncConfig with the given fields replaced."""

@@ -5,10 +5,6 @@ Recursively discovers git repositories under a directory and synchronizes
 each one with its remote.
 """
 
-from colorama import init as colorama_init
-
-colorama_init(autoreset=True)
-
 __version__ = "1.2.0"
 
 # Re-export public API so `from pygit_sync import X` keeps working.

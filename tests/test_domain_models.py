@@ -42,7 +42,6 @@ class TestBranchStatus:
     def test_defaults(self):
         status = BranchStatus()
         assert status.exists is False
-        assert status.is_clean is False
         assert status.has_upstream is False
         assert status.commits_ahead == 0
         assert status.commits_behind == 0

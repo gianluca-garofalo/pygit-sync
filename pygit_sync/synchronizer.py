@@ -39,6 +39,7 @@ class BranchSynchronizer:
         self.repo = repo
         self.output = output
         self.config = config
+        self._plain = config.plain
 
         self.strategies: list[BranchSyncStrategy] = [
             UpToDateStrategy(repo, output, config),
@@ -47,6 +48,10 @@ class BranchSynchronizer:
             AheadOfRemoteStrategy(repo, output, config),
             DivergedBranchStrategy(repo, output, config),
         ]
+
+    def _e(self, emoji: str, plain: str) -> str:
+        """Return *emoji* normally, or *plain* when --plain is active."""
+        return plain if self._plain else emoji
 
     def _matches_branch_filter(self, branch_name: str) -> bool:
         """Return True if the branch matches the configured glob patterns (or no filter is set)."""
@@ -94,7 +99,7 @@ class BranchSynchronizer:
             stash_result = self.repo.stash_push(stash_msg)
             if stash_result.success:
                 stashed_for_sync = True
-                self.output.info(f"\u2713 Stashed local changes for sync: {stash_msg}", indent=1)
+                self.output.info(f"{self._e(chr(0x2713), '[ok]')} Stashed local changes for sync: {stash_msg}", indent=1)
 
         up_to_date = 0
         for branch_name, remote_branch in remote_branches.items():
@@ -120,7 +125,7 @@ class BranchSynchronizer:
                     ))
 
         if up_to_date > 0:
-            self.output.info(f"\u2713 {up_to_date} branches already up to date")
+            self.output.info(f"{self._e(chr(0x2713), '[ok]')} {up_to_date} branches already up to date")
 
         if original_branch and not self.config.dry_run:
             self.repo.checkout(original_branch)
@@ -128,10 +133,10 @@ class BranchSynchronizer:
         if stashed_for_sync:
             pop_result = self.repo.stash_pop()
             if pop_result.success:
-                self.output.success("\u2713 Restored stashed changes", indent=1)
+                self.output.success(f"{self._e(chr(0x2713), '[ok]')} Restored stashed changes", indent=1)
             else:
                 self.output.warning(
-                    "\u26a0 Stash pop had conflicts \u2014 run 'git stash pop' manually",
+                    f"{self._e(chr(0x26a0), '[!]')} Stash pop had conflicts {self._e(chr(0x2014), '--')} run 'git stash pop' manually",
                     indent=1
                 )
                 result.add_issue(SyncIssue(
@@ -145,7 +150,7 @@ class BranchSynchronizer:
     def _fetch_remote(self) -> OperationResult:
         """Fetch from remote with optional retry and exponential backoff."""
         if self.config.dry_run:
-            self.output.info("[DRY RUN] Fetching remote (read-only) to analyze branches...", indent=1)
+            self.output.info("[DRY RUN] Fetching remote to analyze branches...", indent=1)
         max_attempts = 1 + self.config.fetch_retries
         result = OperationResult(False, OperationType.FETCH, "No fetch attempted")
         for attempt in range(max_attempts):
@@ -173,7 +178,7 @@ class BranchSynchronizer:
         if status.has_upstream and status.commits_ahead == 0 and status.commits_behind == 0:
             return None
 
-        self.output.info(f"\u2500 {local_branch.name}")
+        self.output.info(f"{self._e(chr(0x2500), '-')} {local_branch.name}")
 
         # Only checkout if the branch is behind remote (needs pulling)
         if status.commits_behind > 0 and not self.config.dry_run:
@@ -204,10 +209,10 @@ class BranchSynchronizer:
 
         result = self.repo.create_branch(remote_branch.name, remote_branch.full_name)
         if result.success:
-            self.output.success(f"\u2713 Created: {remote_branch.name}", indent=1)
+            self.output.success(f"{self._e(chr(0x2713), '[ok]')} Created: {remote_branch.name}", indent=1)
             return True
         else:
-            self.output.error(f"\u2717 Failed to create: {remote_branch.name}", indent=1)
+            self.output.error(f"{self._e(chr(0x2717), '[X]')} Failed to create: {remote_branch.name}", indent=1)
             return False
 
     def _handle_stale_branches(
@@ -230,7 +235,7 @@ class BranchSynchronizer:
 
                 if branch_name == current:
                     self.output.warning(
-                        f"\u26a0 Skipping stale branch '{branch_name}' (currently checked out)"
+                        f"{self._e(chr(0x26a0), '[!]')} Skipping stale branch '{branch_name}' (currently checked out)"
                     )
                     result.add_issue(SyncIssue(
                         str(self.repo.path), branch_name,
@@ -241,22 +246,28 @@ class BranchSynchronizer:
                 has_upstream = branch_info.tracking_branch is not None or branch_info.has_tracking_config
 
                 if has_upstream:
-                    self.output.warning(f"\u26a0 Stale branch: {branch_name} (upstream deleted)")
+                    self.output.warning(f"{self._e(chr(0x26a0), '[!]')} Stale branch: {branch_name} (upstream deleted)")
                     if self.config.dry_run:
                         self.output.info(f"[DRY RUN] Would delete: {branch_name}", indent=1)
                     else:
-                        delete_result = self.repo.delete_branch(branch_name, force=True)
+                        delete_result = self.repo.delete_branch(branch_name, force=False)
+                        if not delete_result.success:
+                            self.output.warning(
+                                f"{self._e(chr(0x26a0), '[!]')} Branch has unmerged commits, force-deleting: {branch_name}",
+                                indent=1
+                            )
+                            delete_result = self.repo.delete_branch(branch_name, force=True)
                         if delete_result.success:
-                            self.output.success(f"\u2713 Deleted: {branch_name}", indent=1)
+                            self.output.success(f"{self._e(chr(0x2713), '[ok]')} Deleted: {branch_name}", indent=1)
                         else:
-                            self.output.error(f"\u2717 Failed to delete: {branch_name}", indent=1)
+                            self.output.error(f"{self._e(chr(0x2717), '[X]')} Failed to delete: {branch_name}", indent=1)
 
                     result.add_issue(SyncIssue(
                         str(self.repo.path), branch_name,
                         IssueType.STALE, "upstream deleted"
                     ))
                 else:
-                    self.output.info(f"\u2139 Local-only branch: {branch_name} (skipping)")
+                    self.output.info(f"{self._e(chr(0x2139), '[i]')} Local-only branch: {branch_name} (skipping)")
 
         if not stale_found:
             self.output.info("No stale branches found")
