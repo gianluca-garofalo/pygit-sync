@@ -14,6 +14,8 @@ If you have a workspace with 10, 50, or 100+ git repositories, keeping them all 
 
 ## Installation
 
+Requires Python 3.9+.
+
 ```bash
 # Clone or download the project
 cd pygit-sync
@@ -24,6 +26,9 @@ source .venv/bin/activate
 
 # Install the package
 pip install -e .
+
+# (Optional) Install TOML support for config files (built-in on Python 3.11+)
+pip install -e ".[toml]"
 
 # (Optional) Install dev dependencies for testing and linting
 pip install -e ".[dev]"
@@ -63,6 +68,9 @@ pygit-sync ~/projects --json | python -m json.tool
 
 # Retry flaky fetches
 pygit-sync ~/projects --execute --fetch-retries 2
+
+# Create local branches for remote-only branches
+pygit-sync ~/projects --execute --create-branches
 ```
 
 ## How It Works
@@ -87,7 +95,7 @@ For each discovered repo, `BranchSynchronizer` does the following:
 | Ahead of remote (unpushed commits) | `AheadOfRemoteStrategy` | Skip, report as informational issue |
 | Diverged (ahead AND behind) | `DivergedBranchStrategy` | Skip, report as critical issue requiring manual resolution |
 
-4. **Create new branches** -- if a remote branch has no local counterpart and is less than `--max-branch-age` days old (default: 180), create a local tracking branch using `git branch --track` (without checking out). Disable with `--no-create-branches`.
+4. **Create new branches** -- if a remote branch has no local counterpart and is less than `--max-branch-age` days old (default: 180), create a local tracking branch using `git branch --track` (without checking out). Enable with `--create-branches`.
 5. **Restore original branch** -- after iterating, check out whichever branch was active before the sync
 
 Branches are only checked out when they are behind remote and need pulling. Up-to-date, ahead, or diverged branches are analyzed without checkout, avoiding errors on repos with dirty working trees. When `--stash-and-pull` is enabled and the tree is dirty, changes are stashed once before the branch loop and restored afterward.
@@ -113,15 +121,16 @@ use_rebase = true         # false = merge instead of rebase (--no-rebase)
 remove_stale = true       # false = keep stale branches (--no-remove-stale)
 stash_and_pull = false    # same as --stash-and-pull
 parallel = false          # same as --parallel
-max_workers = 8           # same as --max-workers
+# max_workers = 8         # same as --max-workers (default: min(cpu_count, 8))
 verbose = false           # same as --verbose
 remote_name = "origin"    # same as --remote
 branch_patterns = []      # same as --branches (list of glob patterns)
 exclude_patterns = []     # same as --exclude (list of substring patterns)
-create_branches = true    # false = don't create local branches (--no-create-branches)
-max_branch_age = 180      # same as --max-branch-age (0 = no limit)
+create_branches = false   # true = create local branches (--create-branches)
+max_branch_age = 180      # same as --max-branch-age (0 = no limit, requires --create-branches)
 json_output = false       # same as --json
 fetch_retries = 0         # same as --fetch-retries
+plain = false             # same as --plain (disable emoji)
 ```
 
 An explicit path can be specified with `--config /path/to/config.toml`. Requires Python 3.11+ (built-in `tomllib`) or the `tomli` package for older versions.
@@ -141,34 +150,50 @@ The process exits with code 0 on success, 1 if any critical issues (FAILED, STAS
 ## CLI Reference
 
 ```
-usage: pygit-sync [--version] [--execute] [--no-rebase]
-                     [--no-remove-stale] [--stash-and-pull]
-                     [--parallel] [--max-workers N]
-                     [--exclude PATTERN] [--verbose]
-                     [--remote NAME] [--branches PATTERNS]
-                     [--no-create-branches] [--max-branch-age N]
-                     [--json] [--fetch-retries N]
-                     [--config PATH]
-                     [directory]
+usage: pygit-sync [-h] [--version] [-x] [--no-rebase] [--no-remove-stale]
+                  [--stash-and-pull] [--create-branches] [--remote NAME]
+                  [--branches PATTERNS] [--exclude PATTERN]
+                  [--max-branch-age N] [-p] [--max-workers N]
+                  [--fetch-retries N] [-v] [--json] [--plain]
+                  [--config PATH]
+                  [directory]
 ```
+
+### Behavior
 
 | Flag | Default | Description |
 |---|---|---|
 | `directory` | `.` | Root directory to search for git repos |
-| `--execute` | off (dry-run) | Actually perform sync operations |
+| `-x`, `--execute` | off (dry-run) | Actually perform sync operations |
 | `--no-rebase` | rebase on | Use merge instead of rebase |
 | `--no-remove-stale` | remove on | Keep stale local branches |
 | `--stash-and-pull` | off | Auto-stash dirty trees, pull, then pop |
-| `--parallel` | off | Sync repos concurrently |
-| `--max-workers N` | min(cpu, 8) | Thread pool size for parallel mode |
-| `--exclude PATTERN` | none | Substring exclude pattern (repeatable) |
-| `--verbose` | off | Debug-level output and logging |
+| `--create-branches` | off | Create local branches for remote-only branches |
+
+### Filtering
+
+| Flag | Default | Description |
+|---|---|---|
 | `--remote NAME` | `origin` | Remote name to sync from |
 | `--branches PATTERNS` | all | Comma-separated branch glob patterns (e.g., `main,release/*`) |
-| `--no-create-branches` | create on | Do not create local branches for remote-only branches |
-| `--max-branch-age N` | 180 | Only create branches with commits newer than N days (0 = no limit) |
-| `--json` | off | Output results as JSON (suppresses console output) |
+| `--exclude PATTERN` | none | Substring exclude pattern (repeatable) |
+| `--max-branch-age N` | 180 | Only create branches with commits newer than N days (0 = no limit, requires `--create-branches`) |
+
+### Performance
+
+| Flag | Default | Description |
+|---|---|---|
+| `-p`, `--parallel` | off | Sync repos concurrently |
+| `--max-workers N` | min(cpu, 8) | Thread pool size for parallel mode |
 | `--fetch-retries N` | 0 | Number of retries for failed fetches (exponential backoff) |
+
+### Output
+
+| Flag | Default | Description |
+|---|---|---|
+| `-v`, `--verbose` | off | Debug-level output and logging |
+| `--json` | off | Output results as JSON (suppresses console output) |
+| `--plain` | off | Disable emoji in output (for terminals with limited Unicode) |
 | `--config PATH` | auto | Path to `.pygitrc.toml` config file |
 | `--version` | -- | Print version and exit |
 
@@ -235,8 +260,8 @@ pygit-sync/
   LICENSE                  -- MIT license
   CHANGELOG.md             -- version history
   CONTRIBUTING.md          -- development & contribution guide
-  .pygitrc.toml            -- (optional) persistent config
-  .github/workflows/ci.yml -- GitHub Actions CI
+  .github/workflows/
+    ci.yml                 -- GitHub Actions CI
   tests/
     __init__.py
     test_domain_models.py

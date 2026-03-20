@@ -6,7 +6,7 @@ Thanks for your interest in contributing! This document covers how to set up a d
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/pygit-sync.git
+git clone https://github.com/gianluca-garofalo/pygit-sync.git
 cd pygit-sync
 
 # Create a virtual environment
@@ -55,12 +55,17 @@ Key conventions:
 The package is split into 12 modules with a clean dependency graph:
 
 ```
-models.py (leaf — no internal deps)
-  -> protocols.py
-    -> repository.py, output.py, strategies.py
-      -> scanner.py, synchronizer.py
-        -> orchestrator.py
-          -> reporter.py, config.py, cli.py
+models.py       — no internal deps
+protocols.py    — no internal deps
+repository.py   — depends on models, protocols
+output.py       — no internal deps
+strategies.py   — depends on models, output, protocols
+scanner.py      — no internal deps
+synchronizer.py — depends on models, protocols, strategies
+orchestrator.py — depends on models, output, protocols, repository, scanner, synchronizer
+reporter.py     — depends on models, output, protocols
+config.py       — depends on __init__ (lazy import for __version__)
+cli.py          — depends on config, models, orchestrator, output, reporter
 ```
 
 When adding new functionality, keep this layering in mind — lower-level modules should not import from higher-level ones.

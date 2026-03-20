@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-02-08
 
 ### Added
-- `--no-create-branches` flag to disable automatic local branch creation for remote-only branches
+- `--create-branches` flag to create local branches for remote-only branches (off by default)
 - `--max-branch-age` flag to only create branches with commits newer than N days (default: 180)
 - `get_commit_date()` method on `GitRepository` protocol for branch age filtering
 - Pre-stash at sync level: with `--stash-and-pull`, dirty changes are stashed once before syncing all branches (enables checkout to other branches), then restored after
