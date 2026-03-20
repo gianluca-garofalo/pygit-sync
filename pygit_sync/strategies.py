@@ -25,6 +25,10 @@ class BranchSyncStrategy(ABC):
         self.output = output
         self.config = config
 
+    def _e(self, emoji: str, plain: str) -> str:
+        """Return *emoji* normally, or *plain* when --plain is active."""
+        return plain if self.config.plain else emoji
+
     @abstractmethod
     def can_handle(self, branch_info: BranchInfo, status: BranchStatus) -> bool:
         """Return True if this strategy applies to the given branch state."""
@@ -59,10 +63,10 @@ class CleanFastForwardStrategy(BranchSyncStrategy):
         result = self.repo.pull(remote_name, branch_info.name, self.config.use_rebase)
         if result.success:
             operation = "rebased" if self.config.use_rebase else "merged"
-            self.output.success(f"\u2713 Successfully {operation}", indent=1)
+            self.output.success(f"{self._e(chr(0x2713), '[ok]')} Successfully {operation}", indent=1)
             return None
         else:
-            self.output.error(f"\u2717 Pull failed: {result.message}", indent=1)
+            self.output.error(f"{self._e(chr(0x2717), '[X]')} Pull failed: {result.message}", indent=1)
             return SyncIssue(
                 str(self.repo.path),
                 branch_info.name,
@@ -89,7 +93,7 @@ class DirtyWorkingTreeStrategy(BranchSyncStrategy):
         self.output.warning(f"Local changes detected: {changes_desc}", indent=1)
 
         if not self.config.stash_and_pull:
-            self.output.warning("\u26a0 Skipping pull to avoid conflicts", indent=1)
+            self.output.warning(f"{self._e(chr(0x26a0), '[!]')} Skipping pull to avoid conflicts", indent=1)
             self._show_manual_instructions(branch_info)
             return SyncIssue(
                 str(self.repo.path),
@@ -131,7 +135,7 @@ class DirtyWorkingTreeStrategy(BranchSyncStrategy):
 
         stash_result = self.repo.stash_push(stash_msg)
         if not stash_result.success:
-            self.output.error(f"\u2717 Failed to stash: {stash_result.message}", indent=1)
+            self.output.error(f"{self._e(chr(0x2717), '[X]')} Failed to stash: {stash_result.message}", indent=1)
             return SyncIssue(
                 str(self.repo.path),
                 branch_info.name,
@@ -139,11 +143,11 @@ class DirtyWorkingTreeStrategy(BranchSyncStrategy):
                 f"Stash failed: {stash_result.message}"
             )
 
-        self.output.success(f"\u2713 Stashed changes: {stash_msg}", indent=1)
+        self.output.success(f"{self._e(chr(0x2713), '[ok]')} Stashed changes: {stash_msg}", indent=1)
 
         pull_result = self.repo.pull(remote_name, branch_info.name, self.config.use_rebase)
         if not pull_result.success:
-            self.output.error(f"\u2717 Pull failed: {pull_result.message}", indent=1)
+            self.output.error(f"{self._e(chr(0x2717), '[X]')} Pull failed: {pull_result.message}", indent=1)
             self.repo.stash_pop()
             return SyncIssue(
                 str(self.repo.path),
@@ -153,13 +157,13 @@ class DirtyWorkingTreeStrategy(BranchSyncStrategy):
             )
 
         operation = "rebased" if self.config.use_rebase else "merged"
-        self.output.success(f"\u2713 Successfully {operation}", indent=1)
+        self.output.success(f"{self._e(chr(0x2713), '[ok]')} Successfully {operation}", indent=1)
 
         self.output.info("Reapplying stashed changes...", indent=1)
         pop_result = self.repo.stash_pop()
 
         if pop_result.success:
-            self.output.success("\u2713 Stash reapplied successfully", indent=1)
+            self.output.success(f"{self._e(chr(0x2713), '[ok]')} Stash reapplied successfully", indent=1)
             return None
         else:
             self._show_stash_conflict_help(branch_info, stash_msg)
@@ -173,8 +177,8 @@ class DirtyWorkingTreeStrategy(BranchSyncStrategy):
     def _show_stash_conflict_help(self, branch_info: BranchInfo, stash_msg: str):
         """Print conflict resolution instructions after a failed stash pop."""
         self.output.error("", indent=1)
-        self.output.error("\u26a0\u26a0\u26a0 STASH CONFLICT DETECTED \u26a0\u26a0\u26a0", indent=1)
-        self.output.info("\u2501" * SECTION_WIDTH, indent=1)
+        self.output.error(f"{self._e(chr(0x26a0) + chr(0x26a0) + chr(0x26a0), '[!][!][!]')} STASH CONFLICT DETECTED {self._e(chr(0x26a0) + chr(0x26a0) + chr(0x26a0), '[!][!][!]')}", indent=1)
+        self.output.info(self._e(chr(0x2501), '-') * SECTION_WIDTH, indent=1)
         self.output.info("The pull succeeded but stashed changes conflict.", indent=1)
         self.output.info("", indent=1)
         self.output.info("To resolve:", indent=1)
@@ -183,7 +187,7 @@ class DirtyWorkingTreeStrategy(BranchSyncStrategy):
         self.output.info("  git stash apply stash@{0}", indent=1)
         self.output.info("  # Resolve conflicts, then:", indent=1)
         self.output.info("  git stash drop stash@{0}", indent=1)
-        self.output.info("\u2501" * SECTION_WIDTH, indent=1)
+        self.output.info(self._e(chr(0x2501), '-') * SECTION_WIDTH, indent=1)
 
 
 class DivergedBranchStrategy(BranchSyncStrategy):
@@ -195,7 +199,7 @@ class DivergedBranchStrategy(BranchSyncStrategy):
 
     def sync(self, branch_info: BranchInfo, remote_name: str, status: BranchStatus) -> SyncIssue | None:
         """Report divergence and request manual resolution."""
-        self.output.warning("\u26a0 Branch has diverged", indent=1)
+        self.output.warning(f"{self._e(chr(0x26a0), '[!]')} Branch has diverged", indent=1)
         self.output.info(
             f"  {status.commits_ahead} commits ahead, "
             f"{status.commits_behind} commits behind",
@@ -225,7 +229,7 @@ class AheadOfRemoteStrategy(BranchSyncStrategy):
 
     def sync(self, branch_info: BranchInfo, remote_name: str, status: BranchStatus) -> SyncIssue | None:
         """Report unpushed commits as an informational issue."""
-        self.output.info(f"\u2139 Branch is ahead of remote ({status.commits_ahead} commits)", indent=1)
+        self.output.info(f"{self._e(chr(0x2139), '[i]')} Branch is ahead of remote ({status.commits_ahead} commits)", indent=1)
         return SyncIssue(
             str(self.repo.path),
             branch_info.name,
@@ -248,7 +252,7 @@ class UpToDateStrategy(BranchSyncStrategy):
     def sync(self, branch_info: BranchInfo, remote_name: str, status: BranchStatus) -> SyncIssue | None:
         """Confirm the branch is in sync (no-op)."""
         if self.repo.is_clean():
-            self.output.info("\u2713 Already up to date", indent=1)
+            self.output.info(f"{self._e(chr(0x2713), '[ok]')} Already up to date", indent=1)
         else:
-            self.output.info("\u2713 Already up to date (with local changes)", indent=1)
+            self.output.info(f"{self._e(chr(0x2713), '[ok]')} Already up to date (with local changes)", indent=1)
         return None

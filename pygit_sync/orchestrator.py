@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import sys
 import threading
 from pathlib import Path
 
@@ -40,6 +41,10 @@ class SyncOrchestrator:
             self.output.warning(f"No git repositories found in {search_dir}")
             return SyncResult()
 
+        if self.config.dry_run:
+            self.output.warning("[DRY RUN] No changes will be made. Use --execute to apply.")
+            self.output.info("")
+
         self.output.info(f"Found {len(repos)} repositories")
 
         if self.config.parallel:
@@ -47,16 +52,30 @@ class SyncOrchestrator:
         else:
             return self._sync_sequential(repos)
 
+    def _show_progress(self, repo_count: int) -> bool:
+        """Return True if a progress bar should be shown (2+ repos and interactive terminal)."""
+        return repo_count > 1 and sys.stderr.isatty()
+
     def _sync_sequential(self, repos: list[Path]) -> SyncResult:
         """Sync repositories one at a time with a progress bar."""
         combined_result = SyncResult()
+        show_bar = self._show_progress(len(repos))
+        buffers: list[BufferedOutputHandler] = []
 
-        with tqdm(total=len(repos), desc="Syncing", unit="repo", disable=self.config.dry_run) as pbar:
+        with tqdm(total=len(repos), desc="Syncing", unit="repo",
+                  disable=not show_bar, ncols=60, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
             for repo_path in repos:
-                pbar.set_postfix_str(repo_path.name, refresh=True)
-                result = self._sync_single_repo(repo_path)
+                if show_bar:
+                    buf = BufferedOutputHandler()
+                    result = self._sync_single_repo(repo_path, output_override=buf)
+                    buffers.append(buf)
+                else:
+                    result = self._sync_single_repo(repo_path)
                 self._merge_results(combined_result, result)
                 pbar.update(1)
+
+        for buf in buffers:
+            buf.flush_to(self.output)
 
         return combined_result
 
@@ -64,6 +83,7 @@ class SyncOrchestrator:
         """Sync repositories concurrently with buffered output per thread."""
         combined_result = SyncResult()
         lock = threading.Lock()
+        buffers: list[BufferedOutputHandler] = []
 
         def _sync_with_buffer(repo_path: Path) -> tuple[SyncResult, BufferedOutputHandler]:
             buf = BufferedOutputHandler()
@@ -73,24 +93,27 @@ class SyncOrchestrator:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
             futures = {executor.submit(_sync_with_buffer, repo): repo for repo in repos}
 
-            with tqdm(total=len(repos), desc="Syncing repositories") as pbar:
+            with tqdm(total=len(repos), desc="Syncing", unit="repo",
+                      disable=not self._show_progress(len(repos)),
+                      ncols=60, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
                 for future in concurrent.futures.as_completed(futures):
                     repo_path = futures[future]
                     try:
                         result, buf = future.result()
                         with lock:
-                            buf.flush_to(self.output)
+                            buffers.append(buf)
                             self._merge_results(combined_result, result)
                     except Exception as e:
-                        self.output.error(f"Error syncing {repo_path}: {e}")
                         with lock:
                             combined_result.add_issue(SyncIssue(
                                 str(repo_path), "", IssueType.FAILED,
                                 f"Unexpected error: {str(e)}"
                             ))
                     finally:
-                        pbar.set_postfix_str(repo_path.name, refresh=True)
                         pbar.update(1)
+
+        for buf in buffers:
+            buf.flush_to(self.output)
 
         return combined_result
 
